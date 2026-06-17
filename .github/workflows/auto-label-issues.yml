@@ -1,112 +1,532 @@
 name: Setup Issue Templates and Labels
 
 on:
-issues:
-types: [opened, edited]
-pull_request:
-types: [opened, edited, synchronize]
-repository_dispatch:
-types: [create_labels, cleanup, update]
+  # Trigger on issue creation or editing
+  issues:
+    types: [opened, edited]
+  # Trigger on pull request creation or editing
+  pull_request:
+    types: [opened, edited, synchronize]
+  # Trigger the action when a repository dispatch event occurs (e.g., manual trigger for creating labels and templates)
+  repository_dispatch:
+    types: [create_labels, cleanup, update]
 
+# Input parameters for customization
 env:
-CREATE_TEMPLATES: ${{ vars.CREATE_TEMPLATES || 'true' }}
-CREATE_LABELS: ${{ vars.CREATE_LABELS || 'true' }}
-AUTO_LABEL_ISSUES: ${{ vars.AUTO_LABEL_ISSUES || 'true' }}
-RATE_LIMIT_DELAY: ${{ vars.RATE_LIMIT_DELAY || '0.5' }}
-MAX_RETRIES: ${{ vars.MAX_RETRIES || '3' }}
+  CREATE_TEMPLATES: ${{ vars.CREATE_TEMPLATES || 'true' }}
+  CREATE_LABELS: ${{ vars.CREATE_LABELS || 'true' }}
+  AUTO_LABEL_ISSUES: ${{ vars.AUTO_LABEL_ISSUES || 'true' }}
+  RATE_LIMIT_DELAY: ${{ vars.RATE_LIMIT_DELAY || '0.5' }}
+  MAX_RETRIES: ${{ vars.MAX_RETRIES || '3' }}
 
 jobs:
-create_issue_templates:
-runs-on: ubuntu-latest
-if: ${{ vars.CREATE_TEMPLATES != 'false' }}
-steps:
-- name: Checkout repository
-uses: actions/checkout@v3
+  # Job to create issue templates in the repository
+  create_issue_templates:
+    runs-on: ubuntu-latest
+    if: ${{ vars.CREATE_TEMPLATES != 'false' }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+          
+      - name: Install dependencies
+        run: npm ci
+        
+      - name: Generate Issue Templates
+        run: npm run generate:templates
+          
+      - name: Commit Issue Templates
+        run: |
+          git config --global user.email "actions@github.com"
+          git config --global user.name "GitHub Action"
+          git add .github/ISSUE_TEMPLATE/*.md
+          git commit -m "Generate issue templates from config"
+          git push
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-```
-  - name: Setup Node.js
-    uses: actions/setup-node@v3
-    with:
-      node-version: '18'
-      cache: 'npm'
+ 
+  # Job for file-based labeling of pull requests
+  label-by-files:
+    runs-on: ubuntu-latest
+    needs: create_issue_templates
+    if: ${{ vars.AUTO_LABEL_ISSUES != 'false' && github.event_name == 'pull_request' }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0  # Fetch full history for better diff
 
-  - name: Install dependencies
-    run: npm ci
+      - name: Label by file changes
+        run: |
+          echo "🔍 Analyzing file changes for PR #${{ github.event.pull_request.number }}"
+          
+          # Get the list of changed files
+          changed_files=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }})
+          
+          echo "📁 Changed files:"
+          echo "$changed_files"
+          
+          labels_to_add=()
+          
+          # Programming Languages
+          if echo "$changed_files" | grep -q "\.js$\|\.jsx$\|\.ts$\|\.tsx$"; then
+            labels_to_add+=("JavaScript")
+            echo "✅ Detected JavaScript/TypeScript files"
+          fi
+          
+          if echo "$changed_files" | grep -q "\.py$"; then
+            labels_to_add+=("Python")
+            echo "✅ Detected Python files"
+          fi
+          
+          if echo "$changed_files" | grep -q "\.java$"; then
+            labels_to_add+=("Java")
+            echo "✅ Detected Java files"
+          fi
+          
+          if echo "$changed_files" | grep -q "\.swift$"; then
+            labels_to_add+=("Swift")
+            echo "✅ Detected Swift files"
+          fi
+          
+          if echo "$changed_files" | grep -q "\.kt$\|\.kts$"; then
+            labels_to_add+=("Kotlin")
+            echo "✅ Detected Kotlin files"
+          fi
+          
+          if echo "$changed_files" | grep -q "\.go$"; then
+            labels_to_add+=("Go")
+            echo "✅ Detected Go files"
+          fi
+          
+          if echo "$changed_files" | grep -q "\.rs$"; then
+            labels_to_add+=("Rust")
+            echo "✅ Detected Rust files"
+          fi
+          
+          if echo "$changed_files" | grep -q "\.php$"; then
+            labels_to_add+=("PHP")
+            echo "✅ Detected PHP files"
+          fi
+          
+          if echo "$changed_files" | grep -q "\.rb$"; then
+            labels_to_add+=("Ruby")
+            echo "✅ Detected Ruby files"
+          fi
+          
+          if echo "$changed_files" | grep -q "\.cs$"; then
+            labels_to_add+=("C#")
+            echo "✅ Detected C# files"
+          fi
+          
+          # Frontend/Backend Detection
+          if echo "$changed_files" | grep -q "frontend\|client\|src/components\|src/pages\|public/"; then
+            labels_to_add+=("🎨 Client Side")
+            echo "✅ Detected frontend changes"
+          fi
+          
+          if echo "$changed_files" | grep -q "backend\|server\|api\|controllers\|models\|services"; then
+            labels_to_add+=("🖥️ Backend")
+            echo "✅ Detected backend changes"
+          fi
+          
+          # Platform Specific
+          if echo "$changed_files" | grep -q "ios\|iPhone\|iPad\|\.ipa$"; then
+            labels_to_add+=("🍎 Platform-Specific: iOS")
+            echo "✅ Detected iOS-specific changes"
+          fi
+          
+          if echo "$changed_files" | grep -q "android\|\.apk$\|\.aab$"; then
+            labels_to_add+=("🤖 Platform-Specific: Android")
+            echo "✅ Detected Android-specific changes"
+          fi
+          
+          # Infrastructure & DevOps
+          if echo "$changed_files" | grep -q "docker\|Dockerfile\|\.dockerignore"; then
+            labels_to_add+=("⚙️ DevOps")
+            echo "✅ Detected Docker changes"
+          fi
+          
+          if echo "$changed_files" | grep -q "terraform\|\.tf$"; then
+            labels_to_add+=("☁️ Cloud Infrastructure")
+            echo "✅ Detected Terraform changes"
+          fi
+          
+          if echo "$changed_files" | grep -q "kubernetes\|k8s\|\.yaml\|\.yml"; then
+            labels_to_add+=("⚙️ DevOps")
+            echo "✅ Detected Kubernetes changes"
+          fi
+          
+          if echo "$changed_files" | grep -q "\.github/workflows\|\.github/actions"; then
+            labels_to_add+=("⚙️ DevOps")
+            echo "✅ Detected GitHub Actions changes"
+          fi
+          
+          # Testing
+          if echo "$changed_files" | grep -q "test\|spec\|__tests__\|\.test\.\|\.spec\.\|cypress\|jest"; then
+            labels_to_add+=("🔬 Testing: Unit")
+            echo "✅ Detected test files"
+          fi
+          
+          if echo "$changed_files" | grep -q "e2e\|integration\|\.e2e\.\|\.integration\."; then
+            labels_to_add+=("🌐 Testing: End-to-End")
+            echo "✅ Detected E2E test files"
+          fi
+          
+          # Documentation
+          if echo "$changed_files" | grep -q "docs\|documentation\|README\|\.md$"; then
+            labels_to_add+=("📚 Documentation: Updates")
+            echo "✅ Detected documentation changes"
+          fi
+          
+          # Configuration
+          if echo "$changed_files" | grep -q "config\|\.config\.\|\.env\|\.json$"; then
+            labels_to_add+=("⚙️ DevOps")
+            echo "✅ Detected configuration changes"
+          fi
+          
+          # Database
+          if echo "$changed_files" | grep -q "migration\|schema\|\.sql$"; then
+            labels_to_add+=("🖥️ Backend")
+            echo "✅ Detected database changes"
+          fi
+          
+          # Security
+          if echo "$changed_files" | grep -q "security\|auth\|authentication\|\.pem$\|\.key$"; then
+            labels_to_add+=("🖥️ Backend")
+            echo "✅ Detected security-related changes"
+          fi
+          
+          # Performance
+          if echo "$changed_files" | grep -q "performance\|optimization\|cache\|\.cache"; then
+            labels_to_add+=("🚀 Performance")
+            echo "✅ Detected performance-related changes"
+          fi
+          
+          # Remove duplicates
+          labels_to_add=($(printf "%s\n" "${labels_to_add[@]}" | sort -u))
+          
+          echo "🏷️ Labels to add: ${labels_to_add[*]}"
+          
+          # Apply the labels
+          if [[ ${#labels_to_add[@]} -gt 0 ]]; then
+            gh pr edit ${{ github.event.pull_request.number }} --add-label "${labels_to_add[@]}"
+            echo "✅ Successfully applied labels: ${labels_to_add[*]}"
+          else
+            echo "ℹ️ No file-based labels to apply"
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  - name: Generate Issue Templates
-    run: npm run generate:templates
+  # Job for cleaning up orphaned labels (optional)
+  cleanup_labels:
+    runs-on: ubuntu-latest
+    needs: create_labels
+    if: github.event_name == 'repository_dispatch' && github.event.client_payload.action == 'cleanup'
+    steps:
+      - name: Cleanup orphaned labels
+        run: |
+          echo "🧹 Starting label cleanup process..."
+          
+          # Get all current labels
+          current_labels=$(gh api repos/:owner/:repo/labels --jq '.[].name' | tr '\n' ' ')
+          
+          # Define expected labels (same as in create_labels job)
+          declare -A expected_labels=(
+            ["1️⃣ Prelease"]="1"
+            ["2️⃣ MVP"]="1"
+            ["3️⃣ Post Release"]="1"
+            ["⏳ Story Points: 1"]="1"
+            ["⏳ Story Points: 2-3"]="1"
+            ["⏳ Story Points: 5"]="1"
+            ["⏳ Story Points: 8"]="1"
+            ["⏳ Story Points: 13"]="1"
+            ["⏳ Story Points: 20+"]="1"
+            # Add all other expected labels here
+          )
+          
+          # Find orphaned labels (labels that exist but aren't expected)
+          for label in $current_labels; do
+            if [[ ! -v expected_labels["$label"] ]]; then
+              echo "🗑️ Found orphaned label: $label"
+              # Note: We don't delete by default for safety
+              # Uncomment the next line to actually delete
+              # gh api repos/:owner/:repo/labels/"$(echo "$label" | sed 's/ /%20/g')" -X DELETE
+            fi
+          done
+          
+          echo "✅ Cleanup process completed"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  - name: Commit Issue Templates
-    run: |
-      git config --global user.email "actions@github.com"
-      git config --global user.name "GitHub Action"
+  # Job for automatically applying labels to issues based on their content
+  label-issue:
+    runs-on: ubuntu-latest
+    needs: create_labels
+    if: ${{ vars.AUTO_LABEL_ISSUES != 'false' && github.event_name == 'issues' }}
+    steps:
+      - name: Parse and apply labels based on issue content
+        run: |
+          labels_to_add=()
+          issue_body="${{ github.event.issue.body }}"
+          issue_title="${{ github.event.issue.title }}"
+          combined_text="$issue_title $issue_body"
 
-      # Ignore npm/node_modules changes created during the workflow
-      git restore node_modules || true
+          echo "Analyzing issue: ${{ github.event.issue.number }}"
+          echo "Title: $issue_title"
 
-      # Stage only generated issue templates
-      git add .github/ISSUE_TEMPLATE/*.md
+          # First, check for checked checkboxes in the issue body
+          echo "🔍 Checking for checked checkboxes..."
+          
+          # Story Points from checkboxes
+          if [[ "$issue_body" =~ "- \[x\] \*\*Story Points: 1\*\*" ]] || [[ "$issue_body" =~ "- \[X\] \*\*Story Points: 1\*\*" ]]; then
+            labels_to_add+=("⏳ Story Points: 1")
+            echo "✅ Found checked checkbox: ⏳ Story Points: 1"
+          elif [[ "$issue_body" =~ "- \[x\] \*\*Story Points: 2-3\*\*" ]] || [[ "$issue_body" =~ "- \[X\] \*\*Story Points: 2-3\*\*" ]]; then
+            labels_to_add+=("⏳ Story Points: 2-3")
+            echo "✅ Found checked checkbox: ⏳ Story Points: 2-3"
+          elif [[ "$issue_body" =~ "- \[x\] \*\*Story Points: 5\*\*" ]] || [[ "$issue_body" =~ "- \[X\] \*\*Story Points: 5\*\*" ]]; then
+            labels_to_add+=("⏳ Story Points: 5")
+            echo "✅ Found checked checkbox: ⏳ Story Points: 5"
+          elif [[ "$issue_body" =~ "- \[x\] \*\*Story Points: 8\*\*" ]] || [[ "$issue_body" =~ "- \[X\] \*\*Story Points: 8\*\*" ]]; then
+            labels_to_add+=("⏳ Story Points: 8")
+            echo "✅ Found checked checkbox: ⏳ Story Points: 8"
+          elif [[ "$issue_body" =~ "- \[x\] \*\*Story Points: 13\*\*" ]] || [[ "$issue_body" =~ "- \[X\] \*\*Story Points: 13\*\*" ]]; then
+            labels_to_add+=("⏳ Story Points: 13")
+            echo "✅ Found checked checkbox: ⏳ Story Points: 13"
+          elif [[ "$issue_body" =~ "- \[x\] \*\*Story Points: 20\+\*\*" ]] || [[ "$issue_body" =~ "- \[X\] \*\*Story Points: 20\+\*\*" ]]; then
+            labels_to_add+=("⏳ Story Points: 20+")
+            echo "✅ Found checked checkbox: ⏳ Story Points: 20+"
+          fi
 
-      # If templates did not change, do not fail the workflow
-      if git diff --cached --quiet; then
-        echo "No issue template changes to commit"
-      else
-        git commit -m "Generate issue templates from config"
-        git pull --rebase origin "${GITHUB_REF_NAME}"
-        git push origin HEAD:"${GITHUB_REF_NAME}"
-      fi
-    env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-```
+          # Difficulty from checkboxes
+          if [[ "$issue_body" =~ "- \[x\] \*\*Difficulty: Simple\*\*" ]] || [[ "$issue_body" =~ "- \[X\] \*\*Difficulty: Simple\*\*" ]]; then
+            labels_to_add+=("🌱 Difficulty: Simple")
+            echo "✅ Found checked checkbox: 🌱 Difficulty: Simple"
+          elif [[ "$issue_body" =~ "- \[x\] \*\*Difficulty: Easy\*\*" ]] || [[ "$issue_body" =~ "- \[X\] \*\*Difficulty: Easy\*\*" ]]; then
+            labels_to_add+=("👍 Difficulty: Easy")
+            echo "✅ Found checked checkbox: 👍 Difficulty: Easy"
+          elif [[ "$issue_body" =~ "- \[x\] \*\*Difficulty: Moderate\*\*" ]] || [[ "$issue_body" =~ "- \[X\] \*\*Difficulty: Moderate\*\*" ]]; then
+            labels_to_add+=("🛠️ Difficulty: Moderate")
+            echo "✅ Found checked checkbox: 🛠️ Difficulty: Moderate"
+          elif [[ "$issue_body" =~ "- \[x\] \*\*Difficulty: Hard\*\*" ]] || [[ "$issue_body" =~ "- \[X\] \*\*Difficulty: Hard\*\*" ]]; then
+            labels_to_add+=("🔥 Difficulty: Hard")
+            echo "✅ Found checked checkbox: 🔥 Difficulty: Hard"
+          elif [[ "$issue_body" =~ "- \[x\] \*\*Difficulty: Very Hard\*\*" ]] || [[ "$issue_body" =~ "- \[X\] \*\*Difficulty: Very Hard\*\*" ]]; then
+            labels_to_add+=("🧠 Difficulty: Very Hard")
+            echo "✅ Found checked checkbox: 🧠 Difficulty: Very Hard"
+          elif [[ "$issue_body" =~ "- \[x\] \*\*Difficulty: Epic\*\*" ]] || [[ "$issue_body" =~ "- \[X\] \*\*Difficulty: Epic\*\*" ]]; then
+            labels_to_add+=("⚫ Difficulty: Epic")
+            echo "✅ Found checked checkbox: ⚫ Difficulty: Epic"
+          fi
 
-create_labels:
-runs-on: ubuntu-latest
-needs: create_issue_templates
-if: ${{ vars.CREATE_LABELS != 'false' }}
-steps:
-- name: Skip label setup for PoC
-run: |
-echo "Skipping create_labels for PoC"
-echo "Proceeding to label-issue job"
+          # Priority from checkboxes
+          if [[ "$issue_body" =~ "- \[x\] \*\*Priority: Critical\*\*" ]] || [[ "$issue_body" =~ "- \[X\] \*\*Priority: Critical\*\*" ]]; then
+            labels_to_add+=("🚨 Priority: Critical")
+            echo "✅ Found checked checkbox: 🚨 Priority: Critical"
+          elif [[ "$issue_body" =~ "- \[x\] \*\*Priority: High\*\*" ]] || [[ "$issue_body" =~ "- \[X\] \*\*Priority: High\*\*" ]]; then
+            labels_to_add+=("🚨 Priority: High")
+            echo "✅ Found checked checkbox: 🚨 Priority: High"
+          elif [[ "$issue_body" =~ "- \[x\] \*\*Priority: Medium\*\*" ]] || [[ "$issue_body" =~ "- \[X\] \*\*Priority: Medium\*\*" ]]; then
+            labels_to_add+=("🚨 Priority: Medium")
+            echo "✅ Found checked checkbox: 🚨 Priority: Medium"
+          elif [[ "$issue_body" =~ "- \[x\] \*\*Priority: Low\*\*" ]] || [[ "$issue_body" =~ "- \[X\] \*\*Priority: Low\*\*" ]]; then
+            labels_to_add+=("🚨 Priority: Low")
+            echo "✅ Found checked checkbox: 🚨 Priority: Low"
+          fi
 
-label-by-files:
-runs-on: ubuntu-latest
-needs: create_labels
-if: ${{ vars.AUTO_LABEL_ISSUES != 'false' && github.event_name == 'pull_request' }}
-steps:
-- name: Skip pull request labeling for PoC
-run: |
-echo "Skipping label-by-files for PoC"
+          # Development area checkboxes
+          if [[ "$issue_body" =~ "- \[x\] \*\*🎨 Client Side\*\*" ]] || [[ "$issue_body" =~ "- \[X\] \*\*🎨 Client Side\*\*" ]]; then
+            labels_to_add+=("🎨 Client Side")
+            echo "✅ Found checked checkbox: 🎨 Client Side"
+          fi
+          if [[ "$issue_body" =~ "- \[x\] \*\*🖥️ Backend\*\*" ]] || [[ "$issue_body" =~ "- \[X\] \*\*🖥️ Backend\*\*" ]]; then
+            labels_to_add+=("🖥️ Backend")
+            echo "✅ Found checked checkbox: 🖥️ Backend"
+          fi
+          if [[ "$issue_body" =~ "- \[x\] \*\*☁️ Cloud Infrastructure\*\*" ]] || [[ "$issue_body" =~ "- \[X\] \*\*☁️ Cloud Infrastructure\*\*" ]]; then
+            labels_to_add+=("☁️ Cloud Infrastructure")
+            echo "✅ Found checked checkbox: ☁️ Cloud Infrastructure"
+          fi
+          if [[ "$issue_body" =~ "- \[x\] \*\*⚙️ DevOps\*\*" ]] || [[ "$issue_body" =~ "- \[X\] \*\*⚙️ DevOps\*\*" ]]; then
+            labels_to_add+=("⚙️ DevOps")
+            echo "✅ Found checked checkbox: ⚙️ DevOps"
+          fi
+          if [[ "$issue_body" =~ "- \[x\] \*\*👩‍💻 Component/UI\*\*" ]] || [[ "$issue_body" =~ "- \[X\] \*\*👩‍💻 Component/UI\*\*" ]]; then
+            labels_to_add+=("👩‍💻 Component/UI")
+            echo "✅ Found checked checkbox: 👩‍💻 Component/UI"
+          fi
+          if [[ "$issue_body" =~ "- \[x\] \*\*🧠 Logic/Functions\*\*" ]] || [[ "$issue_body" =~ "- \[X\] \*\*🧠 Logic/Functions\*\*" ]]; then
+            labels_to_add+=("🧠 Logic/Functions")
+            echo "✅ Found checked checkbox: 🧠 Logic/Functions"
+          fi
 
-cleanup_labels:
-runs-on: ubuntu-latest
-needs: create_labels
-if: github.event_name == 'repository_dispatch' && github.event.client_payload.action == 'cleanup'
-steps:
-- name: Skip cleanup for PoC
-run: |
-echo "Skipping cleanup_labels for PoC"
+          # Testing checkboxes
+          if [[ "$issue_body" =~ "- \[x\] \*\*🔬 Testing: Unit\*\*" ]] || [[ "$issue_body" =~ "- \[X\] \*\*🔬 Testing: Unit\*\*" ]]; then
+            labels_to_add+=("🔬 Testing: Unit")
+            echo "✅ Found checked checkbox: 🔬 Testing: Unit"
+          fi
+          if [[ "$issue_body" =~ "- \[x\] \*\*🧩 Testing: Integration\*\*" ]] || [[ "$issue_body" =~ "- \[X\] \*\*🧩 Testing: Integration\*\*" ]]; then
+            labels_to_add+=("🧩 Testing: Integration")
+            echo "✅ Found checked checkbox: 🧩 Testing: Integration"
+          fi
+          if [[ "$issue_body" =~ "- \[x\] \*\*🌐 Testing: End-to-End\*\*" ]] || [[ "$issue_body" =~ "- \[X\] \*\*🌐 Testing: End-to-End\*\*" ]]; then
+            labels_to_add+=("🌐 Testing: End-to-End")
+            echo "✅ Found checked checkbox: 🌐 Testing: End-to-End"
+          fi
 
-label-issue:
-runs-on: ubuntu-latest
-needs: create_labels
-if: ${{ vars.AUTO_LABEL_ISSUES != 'false' && github.event_name == 'issues' }}
-steps:
-- name: Parse and apply labels based on issue content
-run: |
-labels_to_add=()
-issue_body="${{ github.event.issue.body }}"
-issue_title="${{ github.event.issue.title }}"
-combined_text="$issue_title $issue_body"
+          # Platform specific checkboxes
+          if [[ "$issue_body" =~ "- \[x\] \*\*🍎 Platform-Specific: iOS\*\*" ]] || [[ "$issue_body" =~ "- \[X\] \*\*🍎 Platform-Specific: iOS\*\*" ]]; then
+            labels_to_add+=("🍎 Platform-Specific: iOS")
+            echo "✅ Found checked checkbox: 🍎 Platform-Specific: iOS"
+          fi
+          if [[ "$issue_body" =~ "- \[x\] \*\*🤖 Platform-Specific: Android\*\*" ]] || [[ "$issue_body" =~ "- \[X\] \*\*🤖 Platform-Specific: Android\*\*" ]]; then
+            labels_to_add+=("🤖 Platform-Specific: Android")
+            echo "✅ Found checked checkbox: 🤖 Platform-Specific: Android"
+          fi
 
-```
-      echo "Analyzing issue: ${{ github.event.issue.number }}"
-      echo "Title: $issue_title"
-      echo "Body: $issue_body"
-      echo "Combined text: $combined_text"
+          # If no checkboxes were checked, fall back to keyword detection
+          if [[ ${#labels_to_add[@]} -eq 0 ]]; then
+            echo "🔍 No checkboxes found, falling back to keyword detection..."
+            
+            # Story Points (check both title and body)
+            if [[ "$combined_text" =~ [Ss]tory\s*[Pp]oints?\s*:\s*1 ]]; then
+              labels_to_add+=("⏳ Story Points: 1")
+            elif [[ "$combined_text" =~ [Ss]tory\s*[Pp]oints?\s*:\s*2-3 ]]; then
+              labels_to_add+=("⏳ Story Points: 2-3")
+            elif [[ "$combined_text" =~ [Ss]tory\s*[Pp]oints?\s*:\s*5 ]]; then
+              labels_to_add+=("⏳ Story Points: 5")
+            elif [[ "$combined_text" =~ [Ss]tory\s*[Pp]oints?\s*:\s*8 ]]; then
+              labels_to_add+=("⏳ Story Points: 8")
+            elif [[ "$combined_text" =~ [Ss]tory\s*[Pp]oints?\s*:\s*13 ]]; then
+              labels_to_add+=("⏳ Story Points: 13")
+            elif [[ "$combined_text" =~ [Ss]tory\s*[Pp]oints?\s*:\s*20\+ ]]; then
+              labels_to_add+=("⏳ Story Points: 20+")
+            fi
 
-      echo "PoC complete"
-    env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-```
+            # Difficulty (check both title and body)
+            if [[ "$combined_text" =~ [Dd]ifficulty\s*:\s*[Ss]imple ]]; then
+              labels_to_add+=("🌱 Difficulty: Simple")
+            elif [[ "$combined_text" =~ [Dd]ifficulty\s*:\s*[Ee]asy ]]; then
+              labels_to_add+=("👍 Difficulty: Easy")
+            elif [[ "$combined_text" =~ [Dd]ifficulty\s*:\s*[Mm]oderate ]]; then
+              labels_to_add+=("🛠️ Difficulty: Moderate")
+            elif [[ "$combined_text" =~ [Dd]ifficulty\s*:\s*[Hh]ard ]]; then
+              labels_to_add+=("🔥 Difficulty: Hard")
+            elif [[ "$combined_text" =~ [Dd]ifficulty\s*:\s*[Vv]ery\s*[Hh]ard ]]; then
+              labels_to_add+=("🧠 Difficulty: Very Hard")
+            elif [[ "$combined_text" =~ [Dd]ifficulty\s*:\s*[Ee]pic ]]; then
+              labels_to_add+=("⚫ Difficulty: Epic")
+            fi
 
+            # Priority (check both title and body)
+            if [[ "$combined_text" =~ [Pp]riority\s*:\s*[Cc]ritical ]]; then
+              labels_to_add+=("🚨 Priority: Critical")
+            elif [[ "$combined_text" =~ [Pp]riority\s*:\s*[Hh]igh ]]; then
+              labels_to_add+=("🚨 Priority: High")
+            elif [[ "$combined_text" =~ [Pp]riority\s*:\s*[Mm]edium ]]; then
+              labels_to_add+=("🚨 Priority: Medium")
+            elif [[ "$combined_text" =~ [Pp]riority\s*:\s*[Ll]ow ]]; then
+              labels_to_add+=("🚨 Priority: Low")
+            fi
+
+            # Auto-detect based on keywords
+            # Frontend/Client Side
+            if [[ "$combined_text" =~ (UI|UX|frontend|front-end|client\s*side|react|vue|angular|component|button|form|layout|design|styling|css|html|javascript|js) ]]; then
+              labels_to_add+=("🎨 Client Side")
+            fi
+
+            # Backend
+            if [[ "$combined_text" =~ (API|backend|back-end|server|database|db|sql|nosql|authentication|auth|middleware|controller|service|model) ]]; then
+              labels_to_add+=("🖥️ Backend")
+            fi
+
+            # Cloud Infrastructure
+            if [[ "$combined_text" =~ (AWS|EC2|S3|RDS|Lambda|cloud|infrastructure|deployment|terraform|kubernetes|docker|container) ]]; then
+              labels_to_add+=("☁️ Cloud Infrastructure")
+            fi
+
+            # DevOps
+            if [[ "$combined_text" =~ (CI|CD|pipeline|automation|deploy|devops|jenkins|github\s*actions|docker|kubernetes|monitoring|logging) ]]; then
+              labels_to_add+=("⚙️ DevOps")
+            fi
+
+            # Testing
+            if [[ "$combined_text" =~ (test|testing|unit\s*test|integration\s*test|e2e|end\s*to\s*end|qa|quality|automation) ]]; then
+              if [[ "$combined_text" =~ (unit\s*test|unit) ]]; then
+                labels_to_add+=("🔬 Testing: Unit")
+              elif [[ "$combined_text" =~ (integration\s*test|integration) ]]; then
+                labels_to_add+=("🧩 Testing: Integration")
+              elif [[ "$combined_text" =~ (e2e|end\s*to\s*end|end-to-end) ]]; then
+                labels_to_add+=("🌐 Testing: End-to-End")
+              else
+                labels_to_add+=("🔬 QA/Automation")
+              fi
+            fi
+
+            # Platform specific
+            if [[ "$combined_text" =~ (iOS|iphone|ipad|swift|objective-c|app\s*store|testflight) ]]; then
+              labels_to_add+=("🍎 Platform-Specific: iOS")
+            fi
+
+            if [[ "$combined_text" =~ (android|kotlin|java|google\s*play|play\s*store) ]]; then
+              labels_to_add+=("🤖 Platform-Specific: Android")
+            fi
+
+            # Documentation
+            if [[ "$combined_text" =~ (documentation|docs|readme|wiki|guide|tutorial|manual) ]]; then
+              if [[ "$combined_text" =~ (new|create|add|write) ]]; then
+                labels_to_add+=("📝 Documentation: New")
+              else
+                labels_to_add+=("📚 Documentation: Updates")
+              fi
+            fi
+
+            # Bug detection
+            if [[ "$combined_text" =~ (bug|error|crash|broken|fix|issue|problem|fails|doesn\'t\s*work) ]]; then
+              labels_to_add+=("🪲 Bug")
+            fi
+
+            # Feature detection
+            if [[ "$combined_text" =~ (feature|enhancement|improvement|new|add|implement) ]]; then
+              labels_to_add+=("✨ Feature")
+            fi
+
+            # Performance
+            if [[ "$combined_text" =~ (performance|slow|speed|optimization|optimize|fast|latency|response\s*time) ]]; then
+              labels_to_add+=("🚀 Performance")
+            fi
+
+            # Technical debt
+            if [[ "$combined_text" =~ (technical\s*debt|refactor|cleanup|legacy|old\s*code|deprecated) ]]; then
+              labels_to_add+=("📉 Technical Debt")
+            fi
+
+            # Maintenance
+            if [[ "$combined_text" =~ (maintenance|update|upgrade|dependency|chore|housekeeping) ]]; then
+              if [[ "$combined_text" =~ (dependency|package|npm|yarn|pip|gem) ]]; then
+                labels_to_add+=("🔄 Maintenance: Dependency Update")
+              else
+                labels_to_add+=("🧹 Maintenance: Chore")
+              fi
+            fi
+          fi
+
+          # Remove duplicates
+          labels_to_add=($(printf "%s\n" "${labels_to_add[@]}" | sort -u))
+
+          echo "Labels to add: ${labels_to_add[*]}"
+
+          # Apply the labels
+          if [[ ${#labels_to_add[@]} -gt 0 ]]; then
+            gh issue edit ${{ github.event.issue.number }} --add-label "${labels_to_add[@]}"
+            echo "✅ Successfully applied labels: ${labels_to_add[*]}"
+          else
+            echo "ℹ️ No labels to apply"
+          fi
