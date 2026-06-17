@@ -21,14 +21,14 @@ env:
 
 jobs:
   # Job to create issue templates in the repository
-    create_issue_templates:
+  create_issue_templates:
     runs-on: ubuntu-latest
     if: ${{ vars.CREATE_TEMPLATES != 'false' }}
     steps:
       - name: Skip issue template setup
         run: |
           echo "Skipping create_issue_templates because this setup job blocks reaching label-issue"
-
+          
   create_labels:
     runs-on: ubuntu-latest
     needs: create_issue_templates
