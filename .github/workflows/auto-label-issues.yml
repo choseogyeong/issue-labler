@@ -220,7 +220,7 @@ jobs:
             # Validate label data before processing
             if ! validate_label "$label_name" "$color" "$description"; then
               echo "❌ Skipping invalid label: $label_name"
-              ((error_count++))
+              ((error_count+=1)))
               continue
             fi
             
@@ -237,17 +237,17 @@ jobs:
               # Create the label with retry logic
               if retry_with_backoff "gh api repos/:owner/:repo/labels -f name=\"$label_name\" -f color=\"$color\" -f description=\"$description\" >/dev/null 2>&1"; then
                 echo "✅ Successfully created: $label_name"
-                ((created_count++))
+                ((created_count+=1))
               else
                 echo "❌ Failed to create: $label_name after retries"
-                ((error_count++))
+                ((error_count+=1))
               fi
               
               # Add delay between creations to avoid rate limits
               sleep 0.5
             else
               echo "⏭️ Label already exists: $label_name"
-              ((skipped_count++))
+              ((skipped_count+=1))
             fi
           done
 
